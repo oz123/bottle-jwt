@@ -56,13 +56,17 @@ def backend():
             return user_record
 
         def get_user(self, user_id):
-            try:
-                user_record = [record for record in self._repo
-                               if record['id'] == user_id].pop()
-            except IndexError:
-                return None
+            """Retrieve User By ID.
 
-            return {k: user_record[k] for k in user_record if k != 'password'}
+            Returns:
+                A dict representing User Record or None.
+            """
+            if user_id in MockBackend.users:
+                user = MockBackend.users[user_id]
+                user_no_pass = user.copy()
+                user_no_pass.pop('password')
+                return user_no_pass
+            return None
 
     return MockBackend(auth_db)
 
@@ -74,7 +78,7 @@ def jwt_provider(backend):
         fields=('username', 'password'),
         backend=backend,
         secret='my_secret',
-        id_field='id',
+        id_field='username',
         ttl=1
     )
 
@@ -94,8 +98,9 @@ def bottle_app(backend):
         backend=backend,
         fields=('username', 'password'),
         secret='my_secret',
-        ttl=3
-    )
+        ttl=3000,
+        **{'id_field': 'username'}
+        )
 
     app.install(jwt_plugin)
 

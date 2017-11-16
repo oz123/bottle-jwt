@@ -12,10 +12,12 @@ import bottle
 import collections
 import jwt
 import datetime
+import datetime as dt
 import logging
 from bottle_jwt.compat import signature
 from bottle_jwt.backends import BaseAuthBackend
-from bottle_jwt.error import JWTBackendError, JWTAuthError, JWTForbiddenError, JWTUnauthorizedError
+from bottle_jwt.error import (JWTBackendError, JWTAuthError, JWTForbiddenError,
+                              JWTUnauthorizedError)
 from bottle_jwt.compat import b
 
 
@@ -56,15 +58,18 @@ class JWTProvider(object):
     """JWT Auth provider concrete class.
     """
 
-    def __init__(self, fields, backend, secret, id_field='id', algorithm='HS256', ttl=None):
+    def __init__(self, backend, fields, secret, id_field='id',
+                 data_fields=None, algorithm='HS256', ttl=None):
         if not isinstance(backend, BaseAuthBackend):  # pragma: no cover
-            raise TypeError('backend instance does not implement {} interface'.format(BaseAuthBackend))
+            raise TypeError('backend instance does not implement {}'
+                            ' interface'.format(BaseAuthBackend))
 
         self.id_field = id_field
         self.user_field = auth_fields(*fields)
         self.secret = secret
         self.backend = backend
         self.algorithm = algorithm
+        self.data_fields = data_fields
         self.ttl = ttl
 
     @property
@@ -75,11 +80,12 @@ class JWTProvider(object):
             seconds=self.ttl
         )
 
-    def create_token(self, user, ttl=None):
+    def create_token(self, user, fields=None, ttl=None):
         """Creates a new signed JWT-valid token.
 
         Args:
-            user (dict): The user record in key/value mapping from instance backend.
+            user (dict): The user record in key/value mapping from instance
+                         backend.
             ttl (int): Optional time to live value.
 
         Returns:
@@ -89,10 +95,15 @@ class JWTProvider(object):
 
         payload = {'sub': base64.b64encode(bytes(user_id)).decode("utf-8")}
 
+        if isinstance(fields, collections.Iterable):
+            for item in fields:
+                payload[item] = user[item]
+
         if self.ttl:
             # you can override instance default ttl in special cases.
             if ttl:
-                payload['exp'] = datetime.datetime.utcnow() + datetime.timedelta(seconds=ttl)
+                payload['exp'] = dt.datetime.utcnow() + dt.timedelta(
+                    seconds=ttl)
 
             else:
                 payload['exp'] = self.expires
@@ -125,18 +136,11 @@ class JWTProvider(object):
             )
 
             logger.debug("Token validation passed: {}".format(token))
-
             user_uid = decoded.get('sub')
-
+            decoded['sub'] = json.loads(base64.b64decode(user_uid).decode('utf-8')) # noqa
             if not user_uid:  # pragma: no cover
                 raise JWTUnauthorizedError('Invalid User token')
-
-            user = self.backend.get_user(json.loads(base64.b64decode(user_uid).decode('utf-8')))
-
-            if user:
-                return user
-
-            raise JWTUnauthorizedError('Invalid User token')
+            return decoded
 
         except (jwt.DecodeError, jwt.ExpiredSignatureError) as e:
             logger.debug("{}: {}".format(e.args[0], token))
@@ -144,18 +148,13 @@ class JWTProvider(object):
 
     def authenticate(self, request):
         """Returns a valid JWT for provided credentials.
-
         Args:
-            request (instance): bottle.request instance.
-
-        Returns:
-            A JWT token string.
 
         Raises:
             BackendError, if an auth backend error occurs.
             JWTProviderError,, if user can't be authorized.
         """
-        if request.content_type.startswith('application/json'):  # pragma: no cover
+        if request.content_type.startswith('application/json'):  # pragma: no cover # noqa
             try:
                 username = request.json.get(self.user_field.user_id)
                 password = request.json.get(self.user_field.password)
@@ -169,7 +168,7 @@ class JWTProvider(object):
         user = self.backend.authenticate_user(username, password)
 
         if user:
-            return self.create_token(user)
+            return self.create_token(user, fields=self.data_fields)
 
         raise JWTAuthError("Unable to authenticate User")
 
@@ -188,7 +187,7 @@ class JWTProvider(object):
             token is provided.
         """
         user_token = request.get_header("Authorization", '')
-        return self.validate_token(user_token) or False
+        return self.validate_token(user_token)
 
 
 class JWTProviderPlugin(object):
@@ -205,7 +204,8 @@ class JWTProviderPlugin(object):
     scope = ('plugin', 'middleware')
     api = 2
 
-    def __init__(self, keyword, auth_endpoint, login_enable=True, scope='plugin', **kwargs):
+    def __init__(self, keyword, auth_endpoint, login_enable=True,
+                 scope='plugin', **kwargs):
         self.keyword = keyword
         self.login_enable = login_enable
         self.scope = scope

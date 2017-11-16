@@ -6,7 +6,8 @@ from __future__ import print_function
 
 
 import pytest
-from bottle_jwt import BaseAuthBackend, JWTAuthError, JWTForbiddenError, JWTUnauthorizedError
+from bottle_jwt import (BaseAuthBackend, JWTAuthError, JWTForbiddenError,
+                        JWTUnauthorizedError)
 from bottle_jwt.compat import b
 import time
 
@@ -55,7 +56,7 @@ def test_provider_authorize_pass(jwt_provider, request):
 
     req.set_header('Authorization', 'JWT {}'.format(token.decode("utf-8")))
 
-    assert jwt_provider.authorize(req)['username'] == 'pav'
+    assert jwt_provider.authorize(req)['sub'] == 'pav'
 
 
 def test_provider_authorize_fail(jwt_provider, request):
@@ -86,7 +87,6 @@ def test_provider_authorize_fail(jwt_provider, request):
 def test_auth_plugin_login_pass(bottle_app):
     """Test `bottle_jwt.JWTProviderPlugin` login web handler pass.
     """
-
     data = bottle_app.post_json('/auth', {'username': 'pav', 'password': '123'})
 
     assert 'token' in data.json

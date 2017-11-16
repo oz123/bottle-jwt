@@ -16,13 +16,11 @@ server_secret = '*Y*^%JHg7623'
 class AuthBackend(object):
     """Implementing an auth backend class with at least two methods.
     """
-    users = {'pav': {'id': 1237832, 'username': 'pav', 'password': '123',
-                     'data': {'sex': 'male', 'active': True,
-                              'role': 'user'}},
-             'admin': {'id': 1237834, 'username': 'pav', 'password': '123',
-                       'data': {'sex': 'female', 'active': True,
-                                'role': 'manager'}}
-             }
+    users = [{'id': 1237832, 'username': 'pav', 'password': '123',
+              'sex': 'male', 'active': True, 'role': 'user'},
+             {'id': 1237834, 'username': 'admin', 'password': '123',
+              'sex': 'female', 'active': True, 'role': 'manager'}
+             ]
 
     def authenticate_user(self, username, password):
         """Authenticate User by username and password.
@@ -30,12 +28,14 @@ class AuthBackend(object):
         Returns:
             A dict representing User Record or None.
         """
-        if username in AuthBackend.users:
-            user = AuthBackend.users[username]
-            if password == user['password']:
-                return user
+        try:
+            user = [user for user in AuthBackend.users if
+                    user['username'] == username].pop()
+        except IndexError:
+            return None
 
-        return None
+        if password == user['password']:
+            return user
 
     def get_user(self, user_id):
         """Retrieve User By ID.
@@ -58,8 +58,7 @@ provider_plugin = JWTProviderPlugin(
     fields=('username', 'password'),
     secret=server_secret,
     ttl=3000,
-    **{'id_field': 'username'}
-
+    **{'id_field': 'username', 'data_fields': ['role', 'sex', 'active']}
 )
 
 
@@ -68,7 +67,7 @@ app.install(provider_plugin)
 
 def do_check_here(role):
     user = bottle.request.get_user()
-    if user['data']['role'] != role:
+    if user['role'] != role:
         raise JWTForbiddenError("Can't access this resource!")
 
 
