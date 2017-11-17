@@ -98,7 +98,7 @@ def bottle_app(backend):
         backend=backend,
         fields=('username', 'password'),
         secret='my_secret',
-        ttl=3000,
+        ttl=1,
         **{'id_field': 'username'}
         )
 
